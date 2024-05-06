@@ -127,7 +127,11 @@ impl<A> Chan<A> {
             return Ok(Err(MailboxFull(waiting)));
         }
 
-        inner.unicast_queue.push(ByPriority(unfulfilled_msg));
+        inner.message_number += 1;
+        let msg_num = inner.message_number;
+        inner
+            .unicast_queue
+            .push(ByPriority(unfulfilled_msg, msg_num));
 
         Ok(Ok(()))
     }
@@ -290,7 +294,9 @@ impl<A> Chan<A> {
         };
 
         if let Err(msg) = inner.try_fulfill_receiver(msg) {
-            inner.unicast_queue.push(ByPriority(msg));
+            inner.message_number += 1;
+            let msg_num = inner.message_number;
+            inner.unicast_queue.push(ByPriority(msg, msg_num));
         }
     }
 
@@ -310,6 +316,7 @@ struct Inner<A> {
     unicast_queue: BinaryHeap<ByPriority<MessageToOne<A>>>,
     broadcast_queues: Vec<Weak<BroadcastQueue<A>>>,
     broadcast_tail: usize,
+    message_number: usize,
 }
 
 impl<A> Inner<A> {
@@ -322,6 +329,7 @@ impl<A> Inner<A> {
             unicast_queue: BinaryHeap::default(),
             broadcast_queues: Vec::default(),
             broadcast_tail: 0,
+            message_number: 0,
         }
     }
 
@@ -330,7 +338,9 @@ impl<A> Inner<A> {
 
         if !self.is_unicast_full() {
             if let Some(msg) = self.try_take_waiting_unicast_message() {
-                self.unicast_queue.push(ByPriority(msg))
+                self.message_number += 1;
+                self.unicast_queue
+                    .push(ByPriority(msg, self.message_number))
             }
         }
 
@@ -369,7 +379,8 @@ impl<A> Inner<A> {
     fn send_broadcast(&mut self, m: MessageToAll<A>) {
         self.broadcast_queues.retain(|queue| match queue.upgrade() {
             Some(q) => {
-                q.lock().push(ByPriority(m.clone()));
+                self.message_number += 1;
+                q.lock().push(ByPriority(m.clone(), self.message_number));
                 true
             }
             None => false, // The corresponding receiver has been dropped - remove it

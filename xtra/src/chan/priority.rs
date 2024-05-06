@@ -17,7 +17,7 @@ pub trait HasPriority {
 }
 
 /// A wrapper struct that allows comparison and ordering for anything thas has a priority, i.e. implements [`HasPriority`].
-pub struct ByPriority<T>(pub T);
+pub struct ByPriority<T>(pub T, pub usize);
 
 impl<T> HasPriority for ByPriority<T>
 where
@@ -53,6 +53,9 @@ where
     T: HasPriority,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.priority().cmp(&other.0.priority())
+        self.0
+            .priority()
+            .cmp(&other.0.priority())
+            .then(other.1.cmp(&self.1))
     }
 }
